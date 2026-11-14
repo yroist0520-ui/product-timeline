@@ -124,7 +124,22 @@ product-timeline/
 
 ## 设计定调
 
-面向独立创作者的 Editorial / Digital Archive 方向：暖纸白底（`#f5f3ed`）、近黑文字、单一荧光绿强调（`#c8ef46`）；Bodoni Moda 衬线用于大日期与标题，IBM Plex Mono 用于时间戳与记录编号，Noto Sans SC 为正文。记忆点是左侧「档案日期轴」——超大衬线月份数字压在发丝规则线上，精确到秒的时间戳与绿色记录编号共同构成不可改写的档案感。不使用统一圆角卡片、渐变紫、通用后台控件。
+面向独立创作者的「数字档案 + iOS 液态玻璃」方向：连续圆角、半透明玻璃卡与 `backdrop-filter` 高斯模糊、彩色光斑折射背景、胶囊按钮与柔和层叠阴影，系统字体栈（无外部字体请求）。同时保留 Editorial 的信息层级与「月份 → 日期 → 精确到秒」的档案日期轴，以及克制的荧光绿强调色。暗色主题与减弱动效均有对应降级。
+
+---
+
+## GitHub Pages 使用界面
+
+`https://yroist0520-ui.github.io/product-timeline/` 直接呈现**完整可使用的网站界面**：时间线、分类筛选、发布作品、作品详情、个人设置，而非跳转页或仓库文件列表。
+
+GitHub Pages 只能托管静态文件，因此 `docs/` 由 `public/` 通过 `npm run build:pages` 生成，并在页面注入 `PT_CONFIG`：
+
+- 页面以 `X-PT-Session` 会话令牌调用真实后端（托管网关会剥离标准 `Authorization` / `Cookie` 头）；
+- 发布时间、图片存储、哈希链与不可篡改触发器**仍在服务端**，Pages 只负责界面；
+- `404.html` 为子路径刷新兜底；静态资源采用内容哈希文件名，并保留无哈希副本以避开 CDN 10 分钟缓存窗口内的白屏；
+- 部署后端需设置 `PT_CORS_ORIGINS=https://yroist0520-ui.github.io`；构建参数可用 `PT_PAGES_API` / `PT_PAGES_SHARECODE` / `PT_PAGES_BASE` 覆盖。
+
+后端服务停止时，Pages 界面将无法读取或写入档案。
 
 ---
 
