@@ -87,6 +87,13 @@ function main() {
   fs.writeFileSync(path.join(DOCS_DIR, 'js', names.views), viewsOut);
   fs.writeFileSync(path.join(DOCS_DIR, 'js', names.app), appOut);
 
+  // 兼容副本：GitHub Pages 的 CDN 会缓存 HTML 约 10 分钟，旧版 HTML 仍引用
+  // 无哈希文件名。保留一套完整且内容最新的同名文件，避免缓存窗口内 404 白屏。
+  fs.writeFileSync(path.join(DOCS_DIR, 'css', 'styles.css'), css);
+  fs.writeFileSync(path.join(DOCS_DIR, 'js', 'core.js'), core);
+  fs.writeFileSync(path.join(DOCS_DIR, 'js', 'views.js'), views);
+  fs.writeFileSync(path.join(DOCS_DIR, 'js', 'app.js'), app);
+
   console.log('[pages] 已生成 docs/（静态资源内容哈希）');
   console.log('[pages] 入口      :', `${BASE_PATH} (index.html + 404.html)`);
   console.log('[pages] 后端 API  :', API_BASE);
