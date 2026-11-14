@@ -10,6 +10,8 @@
  *   - 404.html 作为 SPA 兜底，支持子路径刷新；
  *   - 静态资源采用内容哈希文件名。GitHub Pages 的 CDN 缓存 10 分钟，
  *     若 HTML 已更新而 JS 仍是旧版，会出现白屏；内容寻址文件名可避免错配。
+ *   - 上一代哈希文件名会以「当前内容」保留一份：被 CDN 缓存的旧 HTML 仍能
+ *     加载到新版资源，不会因为旧哈希文件被删除而 404 / 无样式。
  *
  * 用法：npm run build:pages
  * 可用环境变量覆盖：PT_PAGES_API / PT_PAGES_SHARECODE / PT_PAGES_BASE
@@ -48,7 +50,25 @@ function buildShell(names) {
   return html;
 }
 
+/** 读取上一次构建留下的哈希文件名，供 CDN 缓存窗口内的旧 HTML 继续命中。 */
+function previousHashedAssets() {
+  const found = { css: [], core: [], views: [], app: [] };
+  const patterns = [
+    ['css', 'css', /^styles\.[0-9a-f]+\.css$/],
+    ['js', 'core', /^core\.[0-9a-f]+\.js$/],
+    ['js', 'views', /^views\.[0-9a-f]+\.js$/],
+    ['js', 'app', /^app\.[0-9a-f]+\.js$/],
+  ];
+  for (const [dir, kind, re] of patterns) {
+    const base = path.join(DOCS_DIR, dir);
+    if (!fs.existsSync(base)) continue;
+    found[kind].push(...fs.readdirSync(base).filter((name) => re.test(name)));
+  }
+  return found;
+}
+
 function main() {
+  const previous = previousHashedAssets();
   const css = read('css/styles.css');
   const core = read('js/core.js').toString('utf8');
   const views = read('js/views.js').toString('utf8');
@@ -94,7 +114,19 @@ function main() {
   fs.writeFileSync(path.join(DOCS_DIR, 'js', 'views.js'), views);
   fs.writeFileSync(path.join(DOCS_DIR, 'js', 'app.js'), app);
 
+  // 旧 HTML（CDN 缓存）引用的上一代哈希文件继续存在，但内容换成当前版本，
+  // 因此缓存窗口内看到的依然是最新界面，且不会出现 404 / 无样式。
+  const current = { css, core, views: viewsOut, app: appOut };
+  for (const [kind, files] of Object.entries(previous)) {
+    const dir = kind === 'css' ? 'css' : 'js';
+    for (const file of files) {
+      fs.writeFileSync(path.join(DOCS_DIR, dir, file), current[kind]);
+    }
+  }
+  const kept = Object.values(previous).flat();
+
   console.log('[pages] 已生成 docs/（静态资源内容哈希）');
+  if (kept.length) console.log('[pages] 兼容旧缓存  :', kept.join(', '));
   console.log('[pages] 入口      :', `${BASE_PATH} (index.html + 404.html)`);
   console.log('[pages] 后端 API  :', API_BASE);
   console.log('[pages] 资源      :', Object.values(names).join(', '));
