@@ -754,3 +754,29 @@ a { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   .quick-publish { transition: none; }
 }
+
+/* ── 16. 图片加载反馈 ───────────────────────────────────────────────────
+   懒加载图片在到位前保持骨架占位，加载完成后淡入；失败时给出明确提示，
+   避免视口外图片被误认为「上传失败 / 图片加载不出来」。
+   ═══════════════════════════════════════════════════════════════════════ */
+.entry__images .image-frame {
+  background: linear-gradient(100deg, var(--color-surface-2) 18%, var(--color-surface) 40%, var(--color-surface-2) 62%);
+  background-size: 220% 100%;
+  animation: ptShimmer 1.6s linear infinite;
+}
+.entry__images .image-frame.is-loaded {
+  animation: none; background: var(--color-surface-2);
+}
+.entry__images .image-frame img {
+  opacity: 0; transition: opacity .35s var(--ease-out);
+}
+.entry__images .image-frame img.is-loaded { opacity: 1; }
+.entry__images .image-frame.is-failed { animation: none; }
+.entry__images .image-frame.is-failed::after {
+  content: '图片加载失败 · 刷新页面重试';
+  position: absolute; inset: 0; z-index: 2;
+  display: grid; place-items: center; padding: var(--s3);
+  font-family: var(--font-mono); font-size: .68rem; letter-spacing: .06em;
+  color: var(--color-muted); background: var(--color-surface-2); text-align: center;
+}
+@keyframes ptShimmer { to { background-position: -220% 0; } }

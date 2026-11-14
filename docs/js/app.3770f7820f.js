@@ -4,8 +4,8 @@
 
 import {
   state, API, $, $$, navigate, routePath, initReveal, applyTheme, avatarHtml, escapeHtml, toast,
-} from './core.4268faffd3.js';
-import * as V from './views.154f5c5a60.js';
+} from './core.d135f0569f.js';
+import * as V from './views.d62142f23a.js';
 
 const app = $('#app');
 const nav = $('#site-nav');

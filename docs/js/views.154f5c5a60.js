@@ -7,7 +7,7 @@ import {
   state, API, $, $$, escapeHtml, navigate, toast, confirmModal, initReveal,
   activeTimezone, tzLabel, timeParts, formatFull, groupProducts,
   avatarHtml, categoryName, uid, asset,
-} from './core.4268faffd3.js';
+} from './core.d135f0569f.js';
 
 const CATEGORY_HINT = 'CATEGORY INDEX / 分类索引';
 
@@ -257,7 +257,7 @@ export function publishView() {
             <div>
               <div class="dropzone__mark">＋</div>
               <p class="dropzone__title">点击选择，或将图片拖到此处</p>
-              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF · 单张 ≤ 12 MB · 一次最多 9 张</p>
+              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF · 单张 ≤ 12 MB · 一次最多 9 张<br>大图会自动压缩后上传，发布后加载更快</p>
               <span class="dropzone__btn">选择图片</span>
             </div>
           </div>
@@ -344,7 +344,28 @@ export function publishView() {
       previewMeta.textContent = `分类：${cat ? cat.name : '—'} · ${files.length} 张图片${files.length > 1 ? ' · 同一条记录' : ''}`;
     };
 
-    const addFiles = (incoming) => {
+    /** 大图先在本地缩放 + WebP 转码，避免 5 MB 级 PNG 上传与后续加载都变慢。 */
+    const optimizeImage = async (file) => {
+      if (file.size <= 900 * 1024 || file.type === 'image/gif') return file;
+      try {
+        const bitmap = await createImageBitmap(file);
+        const maxEdge = 1800;
+        const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        bitmap.close();
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.82));
+        // 后端按文件头魔数判类型；编码未生成真正的 WebP 时保持原图，避免名实不符。
+        if (!blob || blob.type !== 'image/webp' || !blob.size || blob.size >= file.size * 0.92) return file;
+        return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.webp', { type: 'image/webp' });
+      } catch {
+        return file; // 浏览器不支持时保持原图，不影响发布
+      }
+    };
+
+    const addFiles = async (incoming) => {
       const accepted = [];
       for (const file of incoming) {
         if (!file.type.startsWith('image/')) { toast(`${file.name} 不是图片文件`, 'error'); continue; }
@@ -353,9 +374,12 @@ export function publishView() {
       }
       const room = 9 - files.length;
       if (room <= 0) { toast('单条作品最多 9 张图片', 'error'); return; }
-      accepted.slice(0, room).forEach((file) => {
-        files.push({ id: uid(), file, url: URL.createObjectURL(file) });
-      });
+      const chosen = accepted.slice(0, room);
+      if (chosen.some((f) => f.size > 900 * 1024 && f.type !== 'image/gif')) toast('正在优化大图，稍候即可预览');
+      for (const file of chosen) {
+        const optimized = await optimizeImage(file);
+        files.push({ id: uid(), file: optimized, url: URL.createObjectURL(optimized) });
+      }
       refreshPreview();
       if (accepted.length > room) toast(`已保留前 ${room} 张，单次最多 9 张`, 'error');
     };

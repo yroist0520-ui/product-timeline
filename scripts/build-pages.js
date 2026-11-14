@@ -94,6 +94,14 @@ function main() {
   fs.mkdirSync(path.join(DOCS_DIR, 'js'), { recursive: true });
   fs.mkdirSync(path.join(DOCS_DIR, 'css'), { recursive: true });
 
+  // 演示素材的真实照片随站点一起发布，避免每张图都绕道应用网关。
+  const assetsSrc = path.join(PUBLIC_DIR, 'assets');
+  const assetsDst = path.join(DOCS_DIR, 'assets');
+  if (fs.existsSync(assetsSrc)) {
+    fs.rmSync(assetsDst, { recursive: true, force: true });
+    fs.cpSync(assetsSrc, assetsDst, { recursive: true });
+  }
+
   const shell = buildShell(names);
   fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), shell, 'utf8');
   // GitHub Pages 对不存在的子路径会返回 404.html；用 SPA 外壳兜底，

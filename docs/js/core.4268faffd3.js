@@ -19,10 +19,52 @@ export const state = {
 export const CFG = window.PT_CONFIG || null;
 const TOKEN_KEY = 'pt-token';
 
+/* ── 演示素材的真实照片 ──────────────────────────────────────────────────
+   最初的演示记录用的是程序生成的抽象 PNG，体积大、经应用网关加载慢。这里
+   只在「展示层」把这些已知的演示素材映射为随站点一起发布的真实摄影照片；
+   数据库记录、图片 URL、哈希链和不可篡改规则完全不变。真实用户自己上传的
+   图片不在映射表内，仍由服务端原样提供。
+   ───────────────────────────────────────────────────────────────────── */
+const PHOTO_FILES = [
+  '01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg',
+  '07.jpg', '08.jpg', '09.jpg', '10.jpg', '11.jpg', '12.jpg',
+];
+const DEMO_ART_HASHES = [
+  'f649409742482629be1c8365d464e3f8e8c92a365bb36582a9bf36ca6edf9c55',
+  '10139c05d9248a56e4c52a08f21b2e3dd59fc6a24885563e48a4675cf48a58ac',
+  '9b79a1dab499fd479d03ac8db01bf96127c0aa76eccf274eb2139611da4ddd46',
+  '3b13813d4a5cffe5fa0d7456be7eb850680d4ca2402a1bccecb506a28025ee84',
+  '4203e137491ae513ab8a9ce1e3d760fad8d2240dc88cc17f61f12d86cd33f0a6',
+  'f80471d0eab734334bae0b8c71abfa3407c3198faae5cad6730aa99414c2bdfe',
+  'd847c874ea7635d0ce2f219636b7b62861096d4fd5aa9a3bcb14e6e4ccc4c43e',
+  'c73d93d60a45a9a64499c0a66aca7eb9d3e57ca19b59a8324fd99aa093e7f6b2',
+  'a43acee780834c725fc0f6af685250aeb5b5ff32f8c78ac4dce9d77e23855af0',
+  '9ca2795000b0a74a452aed94aa637e15acc38db952aa46561b67e7e40371974a',
+  'ac12522223632d78e3710cdadb56dd991ba276bf253e32a70170f2f882bc4ede',
+  'f432ecf5729d6ae8800b26d93eebcadbe24c64d06cc1be47491d74befdf77795',
+  '2deb7c12dc0ff300852439087b72b52247557232aef0019fdb93f7f2ef26cc15',
+  '2b5981b9b7c5b034c7958988e2071141a55e9bd4e332ab57f88458d7531c1142',
+  'a6903003d9f3b522bd533ddfd9c1b204d198c99ee62e883b517b7a5c0cf2dfea',
+  '9a9e88f2e0a3ea49f09989ef8f7ca29bff64910d0f4e56e74a6478ac92fccfa4',
+  '430d6c322e5ec701ba8732730b8c5117a018c15e4b9413cd836bed1c52546677',
+  '282f3167fe2eee1f74688347d2bb3fa23c879c6817210d1a79ac815a31b4dd1b',
+];
+const DEMO_MEDIA = new Map(DEMO_ART_HASHES.map((h, i) => [h, PHOTO_FILES[i % PHOTO_FILES.length]]));
+// 一条 2048px / 5.3 MB 的 PNG 会明显拖慢首屏，这里换成同一张图的压缩展示版。
+DEMO_MEDIA.set('a2d24767ef39a4f641f80c224f11864f236cddf27e0f19d71ef581c9f5a454a5', 'user-01.jpg');
+
+function photoUrl(file) {
+  const base = CFG ? String(CFG.basePath || '/') : '/';
+  return base.replace(/\/?$/, '/') + 'assets/photos/' + file;
+}
+
 /** 把后端返回的 /media/... 相对地址转成可跨域加载的绝对地址。 */
 export function asset(url) {
   const value = String(url || '');
-  if (!value || /^(https?:|data:|blob:|\/\/)/i.test(value) || !CFG) return value;
+  if (!value) return value;
+  const hash = /\/media\/[0-9a-f]{2}\/([0-9a-f]{40,})\.[a-z0-9]+/i.exec(value)?.[1];
+  if (hash && DEMO_MEDIA.has(hash)) return photoUrl(DEMO_MEDIA.get(hash));
+  if (/^(https?:|data:|blob:|\/\/)/i.test(value) || !CFG) return value;
   const sep = value.includes('?') ? '&' : '?';
   const q = CFG.sharecode ? sep + 'sharecode=' + encodeURIComponent(CFG.sharecode) : '';
   return CFG.apiBase + (value.startsWith('/') ? value : '/' + value) + q;
@@ -266,4 +308,23 @@ export function categoryName(slug) {
 
 export function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : `tok-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+}
+
+/* ── 图片加载反馈 ───────────────────────────────────────────────────────
+   load / error 不冒泡，用捕获阶段监听。图片未到位时容器保持骨架占位，
+   加载完成后淡入，避免「一片空白」被误认为上传或加载失败。
+   ───────────────────────────────────────────────────────────────────── */
+if (typeof document !== 'undefined') {
+  document.addEventListener('load', (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement) || !img.naturalWidth) return;
+    img.classList.add('is-loaded');
+    img.closest('.image-frame, .preview-card__image, .preview-item')?.classList.add('is-loaded');
+  }, true);
+  document.addEventListener('error', (e) => {
+    const img = e.target;
+    if (!(img instanceof HTMLImageElement)) return;
+    img.classList.add('is-failed');
+    img.closest('.image-frame')?.classList.add('is-failed');
+  }, true);
 }
