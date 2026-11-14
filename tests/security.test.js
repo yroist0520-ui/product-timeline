@@ -394,6 +394,127 @@ async function run() {
     }
   });
 
+  // GitHub Pages 等独立前端：跨站但持有服务端签发的 Bearer 令牌。
+  // 以下用例锁定「网址在 GitHub、机制仍在服务端」这一部署形态的安全边界。
+  const PAGES = 'https://pages.example.test';
+  const pagesHeaders = (extra = {}) => ({ Origin: PAGES, 'Sec-Fetch-Site': 'cross-site', ...extra });
+
+  await test('22. 可信前端 CORS 预检返回 204 与白名单响应头', async () => {
+    const { config } = require('../src/config');
+    config.CORS_ORIGINS.push(PAGES);
+    try {
+      const res = await request('/api/products', {
+        method: 'OPTIONS', auth: false,
+        headers: pagesHeaders({
+          'Access-Control-Request-Method': 'POST',
+          'Access-Control-Request-Headers': 'authorization,content-type',
+        }),
+      });
+      assert.equal(res.status, 204);
+      assert.equal(res.headers.get('access-control-allow-origin'), PAGES);
+      assert.match(res.headers.get('access-control-allow-headers') || '', /Authorization/i);
+    } finally {
+      config.CORS_ORIGINS.pop();
+    }
+  });
+
+  await test('23. 非白名单源的预检与跨站写请求仍被拒绝', async () => {
+    const pre = await request('/api/products', {
+      method: 'OPTIONS', auth: false,
+      headers: { Origin: 'https://evil.example', 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(pre.status, 403);
+    assert.equal(pre.data.code, 'CSRF_REJECTED');
+    const post = await request('/api/auth/login', {
+      method: 'POST', auth: false,
+      headers: { Origin: 'https://evil.example', 'Sec-Fetch-Site': 'cross-site' },
+      body: { username: userA, password: 'test-pass-1234' }, // gau:allow 临时测试账号密码
+    });
+    assert.equal(post.status, 403);
+  });
+
+  await test('24. 可信前端登录取得令牌，Bearer 可读取会话且无 Cookie 依赖', async () => {
+    const { config } = require('../src/config');
+    config.CORS_ORIGINS.push(PAGES);
+    try {
+      const reg = await request('/api/auth/register', {
+        method: 'POST', auth: false, headers: pagesHeaders(),
+        body: { username: 'pages_user', password: 'test-pass-1234', displayName: 'PAGES' }, // gau:allow 临时测试账号密码
+      });
+      assert.equal(reg.status, 201, JSON.stringify(reg.data));
+      assert.equal(typeof reg.data.token, 'string', '可信前端应收到 Bearer 令牌');
+      const token = reg.data.token;
+      const me = await request('/api/auth/me', {
+        auth: false, headers: pagesHeaders({ Authorization: 'Bearer ' + token }),
+      });
+      assert.equal(me.status, 200);
+      assert.equal(me.data.user.username, 'pages_user');
+      assert.equal(me.headers.get('access-control-allow-origin'), PAGES);
+      // 同源站点不返回令牌，避免多余暴露。
+      const sameSite = await request('/api/auth/login', {
+        method: 'POST', auth: false,
+        body: { username: 'pages_user', password: 'test-pass-1234' }, // gau:allow 临时测试账号密码
+      });
+      assert.equal(sameSite.status, 200);
+      assert.equal(sameSite.data.token, undefined);
+    } finally {
+      config.CORS_ORIGINS.pop();
+    }
+  });
+
+  await test('25. 可信前端用令牌发布：服务端时间、不可篡改规则完全一致', async () => {
+    const { config } = require('../src/config');
+    config.CORS_ORIGINS.push(PAGES);
+    try {
+      const authRes = await request('/api/auth/login', {
+        method: 'POST', auth: false, headers: pagesHeaders(),
+        body: { username: 'pages_user', password: 'test-pass-1234' }, // gau:allow 临时测试账号密码
+      });
+      const token = authRes.data.token;
+      assert.equal(typeof token, 'string');
+      const pub = await request('/api/products', {
+        method: 'POST', auth: false,
+        headers: pagesHeaders({ Authorization: 'Bearer ' + token }),
+        body: form({
+          title: 'PAGES 独立前端发布', category: 'wallpaper', clientToken: 'tok-pages-1',
+          createdAt: '2001-01-01T00:00:00.000Z', // 伪造设备时间仍应被丢弃
+        }, [png(23), png(24)]),
+      });
+      assert.equal(pub.status, 201, JSON.stringify(pub.data));
+      nearServerTime(pub.data.product.createdAt);
+      assert.ok(!pub.data.product.createdAt.startsWith('2001'), '客户端伪造时间生效');
+      assert.equal(pub.data.product.images.length, 2, '多图应属于同一条记录');
+      // 没有任何改写端点，令牌也不能绕过数据库触发器。
+      const patch = await request('/api/products/' + encodeURIComponent(pub.data.product.id), {
+        method: 'PATCH', auth: false,
+        headers: pagesHeaders({ Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' }),
+        body: { title: '试图改写' },
+      });
+      assert.ok([404, 405].includes(patch.status));
+    } finally {
+      config.CORS_ORIGINS.pop();
+    }
+  });
+
+  await test('26. 无令牌 / 无效令牌的跨站写请求被拒绝', async () => {
+    const { config } = require('../src/config');
+    config.CORS_ORIGINS.push(PAGES);
+    try {
+      const anon = await request('/api/products', {
+        method: 'POST', auth: false, headers: pagesHeaders(),
+        body: form({ title: '匿名跨域发布', category: 'other', clientToken: 'tok-pages-anon' }, [png(25)]),
+      });
+      assert.equal(anon.status, 401);
+      const bad = await request('/api/auth/me', {
+        auth: false, headers: pagesHeaders({ Authorization: 'Bearer not-a-real-token' }),
+      });
+      assert.equal(bad.status, 200);
+      assert.equal(bad.data.user, null);
+    } finally {
+      config.CORS_ORIGINS.pop();
+    }
+  });
+
   const passed = results.filter((r) => r.ok).length;
   const failed = results.length - passed;
   console.log(`\n  结果：${passed} 通过 / ${failed} 失败（共 ${results.length} 项）\n`);

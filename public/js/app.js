@@ -3,7 +3,7 @@
    ========================================================================= */
 
 import {
-  state, API, $, $$, navigate, initReveal, applyTheme, avatarHtml, escapeHtml, toast,
+  state, API, $, $$, navigate, routePath, initReveal, applyTheme, avatarHtml, escapeHtml, toast,
 } from './core.js';
 import * as V from './views.js';
 
@@ -35,7 +35,7 @@ async function ensureDemoSession() {
 }
 
 function updateNav() {
-  const path = location.pathname;
+  const path = routePath();
   const u = state.user;
   const active = (href) => (href === '/' ? path === '/' || path.startsWith('/u/') || path.startsWith('/category/') : path.startsWith(href));
   const links = [
@@ -51,7 +51,7 @@ function updateNav() {
 }
 
 async function resolveRoute() {
-  const path = decodeURIComponent(location.pathname);
+  const path = routePath();
   const query = new URLSearchParams(location.search);
   let match;
 

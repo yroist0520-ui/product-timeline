@@ -10,8 +10,52 @@ export const state = {
   theme: 'light',
 };
 
+/* ── 独立前端模式 ───────────────────────────────────────────────────────
+   GitHub Pages 只托管静态文件，本项目由 public/ 构建出 docs/ 并在页面注入
+   PT_CONFIG：{ apiBase, sharecode, basePath }。此时页面直接调用真实后端，
+   用 Bearer 令牌代替第三方 Cookie；发布时间、哈希链、不可篡改仍全在服务端。
+   未注入配置时（主站）所有行为与原来完全一致。
+   ---------------------------------------------------------------------- */
+export const CFG = window.PT_CONFIG || null;
+const TOKEN_KEY = 'pt-token';
+
+/** 把后端返回的 /media/... 相对地址转成可跨域加载的绝对地址。 */
+export function asset(url) {
+  const value = String(url || '');
+  if (!value || /^(https?:|data:|blob:|\/\/)/i.test(value) || !CFG) return value;
+  const sep = value.includes('?') ? '&' : '?';
+  const q = CFG.sharecode ? sep + 'sharecode=' + encodeURIComponent(CFG.sharecode) : '';
+  return CFG.apiBase + (value.startsWith('/') ? value : '/' + value) + q;
+}
+
+/** GitHub Pages 子路径下剥离 base，得到与主站一致的路由路径。 */
+export function routePath() {
+  const p = decodeURIComponent(location.pathname);
+  if (!CFG) return p;
+  const base = String(CFG.basePath || '/').replace(/\/$/, '');
+  if (!base || p === base || p === base + '/') return '/';
+  if (p.startsWith(base + '/')) return p.slice(base.length);
+  return p;
+}
+
+function apiUrl(path) {
+  if (!CFG) return path;
+  const sep = path.includes('?') ? '&' : '?';
+  const q = CFG.sharecode ? sep + 'sharecode=' + encodeURIComponent(CFG.sharecode) : '';
+  return CFG.apiBase + path + q;
+}
+
 export async function api(path, options = {}) {
-  const res = await fetch(path, { credentials: 'same-origin', ...options });
+  const headers = new Headers(options.headers || {});
+  if (CFG) {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) headers.set('Authorization', 'Bearer ' + token);
+  }
+  const res = await fetch(apiUrl(path), {
+    credentials: CFG ? 'omit' : 'same-origin',
+    ...options,
+    headers,
+  });
   let data = {};
   try { data = await res.json(); } catch { /* 忽略非 JSON 响应 */ }
   if (!res.ok) {
@@ -21,6 +65,7 @@ export async function api(path, options = {}) {
     err.data = data;
     throw err;
   }
+  if (CFG && data && typeof data.token === 'string') localStorage.setItem(TOKEN_KEY, data.token);
   return data;
 }
 
@@ -28,7 +73,10 @@ export const API = {
   me: () => api('/api/auth/me'),
   login: (username, password) => api('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }),
   register: (username, password, displayName) => api('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, displayName }) }),
-  logout: () => api('/api/auth/logout', { method: 'POST' }),
+  logout: async () => {
+    try { return await api('/api/auth/logout', { method: 'POST' }); }
+    finally { if (CFG) localStorage.removeItem(TOKEN_KEY); }
+  },
   categories: () => api('/api/categories'),
   profile: (username) => api(`/api/profile/${encodeURIComponent(username)}`),
   timeline: (username, params = {}) => api(`/api/timeline/${encodeURIComponent(username)}?${new URLSearchParams(params)}`),
@@ -53,8 +101,9 @@ export function escapeHtml(value) {
 }
 
 export function navigate(path, { replace = false } = {}) {
-  if (replace) history.replaceState({}, '', path);
-  else history.pushState({}, '', path);
+  const target = CFG ? String(CFG.basePath || '/') + String(path).replace(/^\/+/, '') : path;
+  if (replace) history.replaceState({}, '', target);
+  else history.pushState({}, '', target);
   window.dispatchEvent(new CustomEvent('pt:navigate'));
   window.scrollTo({ top: 0, behavior: 'instant' });
 }
@@ -200,7 +249,7 @@ export function applyTheme(theme) {
 /** 生成头像 HTML（无头像时用昵称首字，衬线字体）。 */
 export function avatarHtml(user, cls = 'avatar') {
   if (user?.avatar) {
-    return `<img class="${cls}" src="${escapeHtml(user.avatar)}" alt="${escapeHtml(user.displayName || user.username)} 的头像">`;
+    return `<img class="${cls}" src="${escapeHtml(asset(user.avatar))}" alt="${escapeHtml(user.displayName || user.username)} 的头像">`;
   }
   const ch = (user?.displayName || user?.username || 'P').trim().charAt(0).toUpperCase();
   return `<span class="${cls} avatar--letter" aria-hidden="true">${escapeHtml(ch)}</span>`;

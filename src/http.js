@@ -24,6 +24,23 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
+/**
+ * 可信独立前端（如 GitHub Pages）的 CORS 响应头。
+ * 只有配置白名单内的源才会被回显，且不使用 Cookie 凭据（改用 Bearer 令牌）。
+ * 结果由 server.js 挂到 res._ptCors，所有 API 响应都会自动带上。
+ */
+function corsHeaders(req) {
+  const origin = String(req.headers.origin || '');
+  if (!origin || !config.CORS_ORIGINS.includes(origin)) return {};
+  return {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Max-Age': '600',
+    'Vary': 'Origin',
+  };
+}
+
 function sendJson(res, status, payload, extraHeaders = {}) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
@@ -31,6 +48,7 @@ function sendJson(res, status, payload, extraHeaders = {}) {
     'Content-Length': Buffer.byteLength(body),
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    ...(res._ptCors || {}),
     ...extraHeaders,
   });
   res.end(body);
@@ -124,6 +142,7 @@ function serveStatic(req, res, urlPath) {
     'Content-Length': stat.size,
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': isMedia ? 'public, max-age=31536000, immutable' : 'no-cache',
+    ...(res._ptCors || {}),
   };
   res.writeHead(200, headers);
   fs.createReadStream(full).pipe(res);
@@ -131,5 +150,5 @@ function serveStatic(req, res, urlPath) {
 }
 
 module.exports = {
-  sendJson, sendError, readBody, readJson, parseCookies, serveStatic, resolveStatic, MIME,
+  sendJson, sendError, readBody, readJson, parseCookies, serveStatic, resolveStatic, MIME, corsHeaders,
 };

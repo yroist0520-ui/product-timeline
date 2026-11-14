@@ -107,7 +107,9 @@ async function handleApi(req, res, pathname, url) {
     });
     const token = db.createSession(user.id);
     db.audit('auth.login', { actor: user.id, target: user.id, detail: 'register', ip: clientIp(req) });
-    return sendJson(res, 201, { ok: true, user: db.publicUser(user) }, {
+    // 独立前端无法保存第三方 Cookie，改用令牌；同源站点仍然只用 httpOnly Cookie。
+    const bearer = auth.trustedFrontend(req) ? { token } : {};
+    return sendJson(res, 201, { ok: true, user: db.publicUser(user), ...bearer }, {
       'Set-Cookie': auth.setSessionCookie(res, token),
     });
   }
@@ -122,7 +124,8 @@ async function handleApi(req, res, pathname, url) {
     }
     const token = db.createSession(user.id);
     db.audit('auth.login', { actor: user.id, target: user.id, ip: clientIp(req) });
-    return sendJson(res, 200, { ok: true, user: db.publicUser(user) }, {
+    const bearer = auth.trustedFrontend(req) ? { token } : {};
+    return sendJson(res, 200, { ok: true, user: db.publicUser(user), ...bearer }, {
       'Set-Cookie': auth.setSessionCookie(res, token),
     });
   }

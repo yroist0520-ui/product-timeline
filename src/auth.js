@@ -26,7 +26,14 @@ function verifyPassword(password, stored) {
   }
 }
 
+/**
+ * 会话令牌来源：同源站点用 httpOnly Cookie；可信独立前端（GitHub Pages）
+ * 在第三方上下文里无法依赖 Cookie，改用 Authorization: Bearer。
+ * 两种载体最终都落到同一张 sessions 表，权限与数据隔离完全一致。
+ */
 function sessionToken(req) {
+  const header = String(req.headers.authorization || '');
+  if (/^Bearer\s+/i.test(header)) return header.replace(/^Bearer\s+/i, '').trim().slice(0, 200);
   return parseCookies(req)[COOKIE_NAME] || '';
 }
 
@@ -57,13 +64,22 @@ function clearSessionCookie() {
  *   3. Origin 与可信 host 比对：Host / X-Forwarded-Host / 配置的公网 Origin；
  *   4. 仅当确认处于代理链路（转发头存在）且 Host 为内部地址时，放行 https 的公网 Origin。
  */
+/** 是否来自配置的独立前端白名单（GitHub Pages 等）。 */
+function trustedFrontend(req) {
+  const origin = String(req.headers.origin || '');
+  return Boolean(origin) && config.CORS_ORIGINS.includes(origin);
+}
+
 function originAllowed(req) {
   const site = String(req.headers['sec-fetch-site'] || '').toLowerCase();
-  if (site === 'cross-site') return false;
+  // 白名单前端天然是跨站请求，但携带服务端签发的 Bearer 令牌，属于可信调用方。
+  if (site === 'cross-site') return trustedFrontend(req);
   if (site === 'same-origin' || site === 'same-site' || site === 'none') return true;
 
   const origin = req.headers.origin;
   if (!origin || origin === 'null') return true; // 原生请求 / 沙箱 WebView 无可用 Origin
+
+  if (trustedFrontend(req)) return true;
 
   let parsed;
   try { parsed = new URL(origin); } catch { return false; }
@@ -95,5 +111,5 @@ function validUsername(value) {
 
 module.exports = {
   COOKIE_NAME, hashPassword, verifyPassword, sessionToken,
-  setSessionCookie, clearSessionCookie, originAllowed, validUsername,
+  setSessionCookie, clearSessionCookie, originAllowed, trustedFrontend, validUsername,
 };

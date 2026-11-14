@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const { config } = require('./config');
 const db = require('./db');
 const { handleApi } = require('./api');
-const { sendJson, sendError, serveStatic } = require('./http');
+const { sendJson, sendError, serveStatic, corsHeaders } = require('./http');
 
 function start() {
   db.initDb();
@@ -25,6 +25,8 @@ function start() {
   console.log('[backup]', startupBackup.ok ? path.basename(startupBackup.file) : startupBackup.error);
 
   const server = http.createServer(async (req, res) => {
+    // 统一挂到响应对象上，所有 API / 静态响应都会自动带上白名单 CORS 头。
+    res._ptCors = corsHeaders(req);
     let url;
     try {
       url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -34,6 +36,15 @@ function start() {
     const pathname = url.pathname;
 
     try {
+      // CORS 预检：仅白名单前端放行，且不允许任何数据操作。
+      if (pathname.startsWith('/api/') && req.method === 'OPTIONS') {
+        const headers = corsHeaders(req);
+        if (!headers['Access-Control-Allow-Origin']) {
+          return sendError(res, 403, 'CSRF_REJECTED', '跨站请求被拒绝');
+        }
+        res.writeHead(204, headers);
+        return res.end();
+      }
       if (pathname.startsWith('/api/')) {
         await handleApi(req, res, pathname, url);
         return;

@@ -6,7 +6,7 @@
 import {
   state, API, $, $$, escapeHtml, navigate, toast, confirmModal, initReveal,
   activeTimezone, tzLabel, timeParts, formatFull, groupProducts,
-  avatarHtml, categoryName, uid,
+  avatarHtml, categoryName, uid, asset,
 } from './core.js';
 
 const CATEGORY_HINT = 'CATEGORY INDEX / 分类索引';
@@ -17,12 +17,12 @@ function imageGrid(product, mode = 'entry') {
   const count = product.images.length;
   const cls = mode === 'entry' ? 'entry__images' : 'detail-gallery';
   const items = product.images.map((img, i) => {
-    const inner = `<img src="${escapeHtml(img.url)}" alt="${escapeHtml(product.title)} — 图片 ${i + 1}" loading="lazy">`;
+    const inner = `<img src="${escapeHtml(asset(img.url))}" alt="${escapeHtml(product.title)} — 图片 ${i + 1}" loading="lazy">`;
     return mode === 'entry'
       ? `<a class="image-frame" href="/p/${encodeURIComponent(product.id)}" data-link aria-label="查看作品：${escapeHtml(product.title)}">
            ${inner}<span class="image-frame__zoom">VIEW ↗</span>
          </a>`
-      : `<a class="image-frame" href="${escapeHtml(img.url)}" target="_blank" rel="noopener" aria-label="打开高清原图">${inner}</a>`;
+      : `<a class="image-frame" href="${escapeHtml(asset(img.url))}" target="_blank" rel="noopener" aria-label="打开高清原图">${inner}</a>`;
   }).join('');
   return `<div class="${cls}" data-count="${count}">${items}</div>`;
 }

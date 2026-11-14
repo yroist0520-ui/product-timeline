@@ -12,7 +12,8 @@
     "dev": "node --disable-warning=ExperimentalWarning src/server.js",
     "test": "node --disable-warning=ExperimentalWarning tests/security.test.js",
     "seed": "node --disable-warning=ExperimentalWarning src/seed.js",
-    "verify": "node --disable-warning=ExperimentalWarning src/verify.js"
+    "verify": "node --disable-warning=ExperimentalWarning src/verify.js",
+    "build:pages": "node scripts/build-pages.js"
   },
   "dependencies": {}
 }
