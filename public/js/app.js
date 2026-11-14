@@ -10,6 +10,29 @@ import * as V from './views.js';
 const app = $('#app');
 const nav = $('#site-nav');
 const navToggle = $('#nav-toggle');
+const quickPublish = $('#quick-publish');
+
+/**
+ * 打开即用：访客静默进入共享演示档案，登录页不再是必经门槛。
+ * 后端认证与多用户隔离仍然保留；主动退出后不会自动重新进入。
+ */
+let pendingDemo = null;
+async function ensureDemoSession() {
+  if (state.user) return true;
+  if (pendingDemo) return pendingDemo;
+  pendingDemo = (async () => {
+    try {
+      const res = await API.login('demo', 'demo1234');
+      state.user = res.user;
+      return true;
+    } catch {
+      return false;
+    } finally {
+      pendingDemo = null;
+    }
+  })();
+  return pendingDemo;
+}
 
 function updateNav() {
   const path = location.pathname;
@@ -17,14 +40,12 @@ function updateNav() {
   const active = (href) => (href === '/' ? path === '/' || path.startsWith('/u/') || path.startsWith('/category/') : path.startsWith(href));
   const links = [
     `<a class="nav-link ${active('/') ? 'is-active' : ''}" href="/" data-link>时间线</a>`,
-    u ? `<a class="nav-link ${active('/publish') ? 'is-active' : ''}" href="/publish" data-link>发布作品</a>` : '',
     u ? `<a class="nav-link ${active('/settings') ? 'is-active' : ''}" href="/settings" data-link>设置</a>` : '',
-    u
-      ? `<a class="nav-user" href="/settings" data-link>${avatarHtml(u, 'nav-user__avatar')}<span>@${escapeHtml(u.username)}</span></a>`
-      : `<a class="nav-link ${active('/login') ? 'is-active' : ''}" href="/login" data-link>登录 / 注册</a>`,
-    `<a class="nav-link nav-link--primary" href="${u ? '/publish' : '/login'}" data-link>${u ? '＋ 发布' : '开始记录'}</a>`,
+    u ? `<a class="nav-user" href="/settings" data-link>${avatarHtml(u, 'nav-user__avatar')}<span>@${escapeHtml(u.username)}</span></a>` : '',
   ].filter(Boolean).join('');
   nav.innerHTML = links;
+  quickPublish.setAttribute('href', '/publish');
+  quickPublish.setAttribute('aria-label', '发布作品（上传新作品）');
   nav.classList.remove('is-open');
   navToggle.setAttribute('aria-expanded', 'false');
 }
@@ -46,7 +67,10 @@ async function resolveRoute() {
   if ((match = /^\/category\/([^/]+)\/?$/.exec(path))) {
     return V.homeView({ username: state.user ? state.user.username : undefined, category: match[1] });
   }
-  if (path === '/publish') return V.publishView();
+  if (path === '/publish') {
+    await ensureDemoSession();
+    return V.publishView();
+  }
   if ((match = /^\/p\/([^/]+)\/?$/.exec(path))) return V.detailView(match[1]);
   if (path === '/settings') return V.settingsView();
   if (path === '/login') return V.authView(query.get('mode'));
@@ -95,6 +119,7 @@ document.addEventListener('click', (e) => {
   const href = link.getAttribute('href');
   if (!href || href.startsWith('http')) return;
   e.preventDefault();
+  if (nav.contains(link)) nav.classList.remove('is-open');
   navigate(href);
 });
 
@@ -116,6 +141,9 @@ async function boot() {
     state.categories = categories.categories;
   } catch (err) {
     toast('无法连接服务端，部分功能不可用', 'error');
+  }
+  if (!state.user && !localStorage.getItem('pt-manual-logout')) {
+    await ensureDemoSession();
   }
   if (state.user) applyTheme(state.user.theme || 'light');
   document.addEventListener('pt:theme-change', (e) => {

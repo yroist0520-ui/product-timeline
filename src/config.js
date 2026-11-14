@@ -8,6 +8,8 @@ const config = {
   ROOT,
   PORT: Number(process.env.PORT || 4173),
   HOST: process.env.HOST || '127.0.0.1',
+  // 反向代理后的公网 Origin（逗号分隔）。部署时显式声明，CSRF 校验无需依赖被改写的 Host。
+  PUBLIC_ORIGINS: (process.env.PT_PUBLIC_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean),
   DATA_DIR: process.env.PT_DATA_DIR || path.join(ROOT, 'data'),
   DB_PATH: process.env.PT_DB || path.join(ROOT, 'data', 'timeline.sqlite'),
   BACKUP_DIR: process.env.PT_BACKUP_DIR || path.join(ROOT, 'data', 'backups'),

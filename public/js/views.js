@@ -88,7 +88,7 @@ function mastheadHtml(profile, viewing) {
   const isMine = state.user && state.user.username === user.username;
   let notice = '';
   if (!state.user) {
-    notice = `<div class="masthead__notice">正在浏览公开演示档案。<a href="/login" data-link>登录 / 注册</a> 即可开启属于你自己的永久时间线。</div>`;
+    notice = `<div class="masthead__notice">正在浏览公开演示档案。<a href="/publish" data-link>点这里发布作品</a>，或创建属于自己的独立档案。</div>`;
   } else if (!isMine) {
     notice = `<div class="masthead__notice">正在浏览 ${escapeHtml(user.username)} 的公开档案。<a href="/" data-link>回到我的时间线 →</a></div>`;
   }
@@ -138,15 +138,13 @@ function emptyHtml(profile, category) {
     return `<div class="state"><div class="state__glyph">∅</div>
       <h3 class="state__title">「${escapeHtml(categoryName(category))}」还是空的</h3>
       <p class="state__text">这一分类尚未发布过作品。每一次发布都会在档案里留下一条真实、不可改写的时间记录。</p>
-      ${state.user ? `<a class="btn btn--accent" href="/publish" data-link>发布作品 →</a>` : `<a class="btn" href="/login" data-link>登录开始 →</a>`}
+      <a class="btn btn--accent" href="/publish" data-link>发布作品 →</a>
     </div>`;
   }
   return `<div class="state"><div class="state__glyph">01</div>
     <h3 class="state__title">档案从第一件作品开始</h3>
     <p class="state__text">这里将按真实发布时间倒序陈列你的全部作品，同一天的记录归入同一日期区块，永久保留。</p>
-    ${state.user
-      ? `<a class="btn btn--accent" href="/publish" data-link>发布第一件作品 →</a>`
-      : `<a class="btn btn--accent" href="/login" data-link>注册并开始记录 →</a>`}
+    <a class="btn btn--accent" href="/publish" data-link>发布第一件作品 →</a>
   </div>`;
 }
 
@@ -242,7 +240,7 @@ export async function homeView({ username, category = 'all' }) {
 /* ── B. 发布页 ────────────────────────────────────────────────────────── */
 export function publishView() {
   if (!state.user) {
-    return { title: '请先登录', html: `<div class="wrap"><div class="state"><div class="state__glyph">↗</div><h3 class="state__title">登录后即可发布作品</h3><p class="state__text">作品会写入你自己的永久档案，发布时间由服务端生成。</p><a class="btn btn--accent" href="/login" data-link>登录 / 注册 →</a></div></div>` };
+    return { title: '正在准备档案', html: `<div class="wrap"><div class="state"><div class="state__glyph">↗</div><h3 class="state__title">档案会话尚未建立</h3><p class="state__text">返回时间线后点击顶部「＋ 发布作品」即可自动进入，无需注册。</p><a class="btn btn--accent" href="/" data-link>返回时间线 →</a></div></div>` };
   }
   const options = state.categories.map((c) => `<option value="${escapeHtml(c.slug)}">${escapeHtml(c.name)}</option>`).join('');
   const html = `
@@ -625,6 +623,7 @@ export async function settingsView() {
             <div class="panel__title">ACCOUNT</div>
             <p class="panel__text mono" style="font-size:.72rem">@${escapeHtml(u.username)}<br>${escapeHtml(u.id)}</p>
             <button class="btn btn--ghost" id="logout-btn" style="width:100%;margin-top:8px">退出登录</button>
+            <a class="settings-switch" href="/login" data-link>切换 / 创建独立档案 →</a>
           </div>
         </aside>
       </div>
@@ -693,8 +692,9 @@ export async function settingsView() {
     $('#logout-btn').addEventListener('click', async () => {
       await API.logout();
       state.user = null;
+      localStorage.setItem('pt-manual-logout', '1');
       toast('已退出登录');
-      navigate('/');
+      navigate('/login');
     });
   };
   return { html, title: '个人设置 — PRODUCT TIMELINE', init };
@@ -714,9 +714,15 @@ export function authView(mode = 'login') {
         </section>
         <section class="auth-panel">
           <div class="auth-panel__inner">
+            <div class="auth-quick">
+              <span class="auth-quick__eyebrow">QUICK START / 打开即用</span>
+              <button class="btn btn--accent btn--quick" id="quick-enter" type="button">一键进入 <span aria-hidden="true">→</span></button>
+              <p class="auth-quick__hint">无需账号密码，直接开始发布作品。<br>当前使用共享演示档案，作品会公开陈列在时间线上。</p>
+            </div>
+            <div class="auth-divider"><span>已有自己的独立档案？</span></div>
             <div class="auth-tabs" role="tablist">
               <button class="auth-tab ${current === 'login' ? 'is-active' : ''}" data-tab="login" role="tab">登录</button>
-              <button class="auth-tab ${current === 'register' ? 'is-active' : ''}" data-tab="register" role="tab">注册新档案</button>
+              <button class="auth-tab ${current === 'register' ? 'is-active' : ''}" data-tab="register" role="tab">创建独立档案</button>
             </div>
             <div id="form-error"></div>
             <form class="auth-form" id="auth-form" novalidate>
@@ -734,8 +740,8 @@ export function authView(mode = 'login') {
               </div>
               <button class="btn btn--accent" type="submit" id="auth-submit">${current === 'login' ? '登录 →' : '创建档案 →'}</button>
             </form>
-            <p class="auth-note">注册后即可拥有独立的数据空间。所有发布时间由数据库服务器时钟生成，与设备本地时间无关。</p>
-            <div class="auth-demo">演示档案：<strong>demo / demo1234</strong><br><a href="/u/demo" data-link>或直接浏览公开演示时间线 →</a></div>
+            <p class="auth-note">独立档案拥有自己的数据空间。所有发布时间由数据库服务器时钟生成，与设备本地时间无关。</p>
+            <div class="auth-demo">只想先看看？<a href="/u/demo" data-link>浏览公开演示时间线 →</a></div>
           </div>
         </section>
       </div>
@@ -745,6 +751,21 @@ export function authView(mode = 'login') {
     const form = $('#auth-form');
     const errorBox = $('#form-error');
     const displayField = $('#display-field');
+    const quick = $('#quick-enter');
+    quick.addEventListener('click', async () => {
+      quick.disabled = true; quick.textContent = '正在进入…';
+      try {
+        const res = await API.login('demo', 'demo1234');
+        state.user = res.user;
+        localStorage.removeItem('pt-manual-logout');
+        toast('已进入演示档案 · 可以开始发布作品');
+        navigate('/');
+      } catch (err) {
+        errorBox.innerHTML = `<div class="form-error">${escapeHtml(err.message || '进入失败')}</div>`;
+        quick.disabled = false;
+        quick.innerHTML = '一键进入 <span aria-hidden="true">→</span>';
+      }
+    });
     $$('.auth-tab').forEach((tab) => tab.addEventListener('click', () => {
       current = tab.dataset.tab;
       $$('.auth-tab').forEach((t) => t.classList.toggle('is-active', t === tab));
@@ -766,6 +787,7 @@ export function authView(mode = 'login') {
           ? await API.login(username, password)
           : await API.register(username, password, displayName);
         state.user = res.user;
+        localStorage.removeItem('pt-manual-logout');
         toast(current === 'login' ? '欢迎回来' : '档案已创建，开始记录吧');
         navigate('/');
       } catch (err) {

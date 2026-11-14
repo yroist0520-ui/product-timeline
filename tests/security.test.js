@@ -346,6 +346,54 @@ async function run() {
     assert.equal(res.status, 401);
   });
 
+  // 线上部署在反向代理之后：Host 被改写为内部地址，早期版本会把所有同源写请求
+  // 误判为跨站。以下用例锁定修复后的行为，同时保留真实跨站防护。
+  await test('18. 本地直连：伪造跨站 Origin 仍被拒绝', async () => {
+    const res = await request('/api/health', {
+      headers: { Origin: 'https://evil.example' }, auth: false,
+    });
+    assert.equal(res.status, 403);
+    assert.equal(res.data.code, 'CSRF_REJECTED');
+  });
+
+  await test('19. 反向代理：公网 https Origin + 转发头不再被误判为跨站', async () => {
+    const res = await request('/api/health', {
+      auth: false,
+      headers: {
+        Origin: 'https://wbapp-example.app.workbuddy.host',
+        'X-Forwarded-Proto': 'https',
+      },
+    });
+    assert.equal(res.status, 200, JSON.stringify(res.data));
+    assert.equal(res.data.ok, true);
+  });
+
+  await test('20. Fetch Metadata：cross-site 拒绝，same-origin 放行', async () => {
+    const cross = await request('/api/health', {
+      auth: false,
+      headers: { Origin: 'https://evil.example', 'Sec-Fetch-Site': 'cross-site' },
+    });
+    assert.equal(cross.status, 403);
+    const same = await request('/api/health', {
+      auth: false,
+      headers: { Origin: 'https://wbapp-example.app.workbuddy.host', 'Sec-Fetch-Site': 'same-origin' },
+    });
+    assert.equal(same.status, 200);
+  });
+
+  await test('21. 配置的公网 Origin 被信任（不依赖转发头）', async () => {
+    const { config } = require('../src/config');
+    config.PUBLIC_ORIGINS.push('https://archive.example.com');
+    try {
+      const res = await request('/api/health', {
+        auth: false, headers: { Origin: 'https://archive.example.com' },
+      });
+      assert.equal(res.status, 200, JSON.stringify(res.data));
+    } finally {
+      config.PUBLIC_ORIGINS.pop();
+    }
+  });
+
   const passed = results.filter((r) => r.ok).length;
   const failed = results.length - passed;
   console.log(`\n  结果：${passed} 通过 / ${failed} 失败（共 ${results.length} 项）\n`);

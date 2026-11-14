@@ -44,13 +44,49 @@ function clearSessionCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-/** 简易 CSRF 防护：跨站表单无法伪造 Origin 头。 */
+/**
+ * CSRF 防护。
+ *
+ * 线上服务位于反向代理之后：浏览器看到的 Origin 是公网域名，而 Node 收到的
+ * Host 常被改写为内部地址。早期版本只比较两者，导致所有同源写请求（登录、
+ * 注册、发布作品）都被误判为「跨站请求被拒绝」。
+ *
+ * 现在的判定顺序：
+ *   1. Fetch Metadata（Sec-Fetch-Site）优先，现代浏览器可精确区分同站/跨站；
+ *   2. 无 Origin 的原生请求放行（跨站表单无法伪造 JSON 请求，Cookie 为 SameSite=Lax）；
+ *   3. Origin 与可信 host 比对：Host / X-Forwarded-Host / 配置的公网 Origin；
+ *   4. 仅当确认处于代理链路（转发头存在）且 Host 为内部地址时，放行 https 的公网 Origin。
+ */
 function originAllowed(req) {
+  const site = String(req.headers['sec-fetch-site'] || '').toLowerCase();
+  if (site === 'cross-site') return false;
+  if (site === 'same-origin' || site === 'same-site' || site === 'none') return true;
+
   const origin = req.headers.origin;
-  if (!origin) return true; // 同源 GET / 无 Origin 的原生请求
-  let host;
-  try { host = new URL(origin).host; } catch { return false; }
-  return host === req.headers.host;
+  if (!origin || origin === 'null') return true; // 原生请求 / 沙箱 WebView 无可用 Origin
+
+  let parsed;
+  try { parsed = new URL(origin); } catch { return false; }
+  const originHost = parsed.host;
+
+  const trusted = new Set();
+  if (req.headers.host) trusted.add(req.headers.host);
+  const forwardedHost = req.headers['x-forwarded-host'];
+  if (forwardedHost) {
+    forwardedHost.split(',').forEach((h) => { if (h.trim()) trusted.add(h.trim()); });
+  }
+  for (const base of config.PUBLIC_ORIGINS) {
+    try { trusted.add(new URL(base).host); } catch { /* 忽略无效配置 */ }
+  }
+  if (trusted.has(originHost)) return true;
+
+  // 代理改写 Host 的兜底：只在明确存在转发头、且后端 Host 是内部地址时生效。
+  // 本地直连/测试环境没有转发头，恶意 Origin 依旧会被拒绝。
+  const proxied = Boolean(forwardedHost || req.headers['x-forwarded-proto']);
+  const hostIsInternal = /^(localhost|127\.|0\.0\.0\.0|\[::1\]|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|[^.:]+$)/i.test(String(req.headers.host || ''));
+  if (proxied && hostIsInternal && parsed.protocol === 'https:') return true;
+
+  return false;
 }
 
 function validUsername(value) {
