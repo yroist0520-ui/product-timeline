@@ -32,8 +32,16 @@ function verifyPassword(password, stored) {
  * 两种载体最终都落到同一张 sessions 表，权限与数据隔离完全一致。
  */
 function sessionToken(req) {
+  // 某些托管网关会占用 Authorization / 改写 Cookie，故提供专用头与查询参数兜底。
+  // 四个来源指向同一张 sessions 表，令牌都以 SHA-256 哈希入库，权限完全一致。
+  const custom = String(req.headers['x-pt-session'] || '').trim();
+  if (custom) return custom.slice(0, 200);
   const header = String(req.headers.authorization || '');
   if (/^Bearer\s+/i.test(header)) return header.replace(/^Bearer\s+/i, '').trim().slice(0, 200);
+  try {
+    const queryToken = new URL(req.url || '/', 'http://localhost').searchParams.get('pt_token');
+    if (queryToken) return queryToken.slice(0, 200);
+  } catch { /* 忽略畸形 URL */ }
   return parseCookies(req)[COOKIE_NAME] || '';
 }
 

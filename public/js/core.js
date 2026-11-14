@@ -49,7 +49,11 @@ export async function api(path, options = {}) {
   const headers = new Headers(options.headers || {});
   if (CFG) {
     const token = localStorage.getItem(TOKEN_KEY);
-    if (token) headers.set('Authorization', 'Bearer ' + token);
+    if (token) {
+      // 网关可能占用标准 Authorization 头，同步发送专用头；后端按同一会话表校验。
+      headers.set('X-PT-Session', token);
+      headers.set('Authorization', 'Bearer ' + token);
+    }
   }
   const res = await fetch(apiUrl(path), {
     credentials: CFG ? 'omit' : 'same-origin',
