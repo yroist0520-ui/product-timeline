@@ -24,3 +24,6 @@ id_rsa
 # 系统文件
 .DS_Store
 Thumbs.db
+
+# 应用发布标记文件（平台内部使用，不入库）
+*.genie
