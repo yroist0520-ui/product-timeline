@@ -1,0 +1,26 @@
+# 运行时数据：数据库、备份快照、用户上传的图片（由 npm run seed / 上传功能自动生成）
+data/
+uploads/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# WorkBuddy 工作区元数据
+.workbuddy/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# 本地凭据与环境变量（绝不入库）
+.env
+.env.*
+*.pem
+*.key
+*.p12
+id_rsa
+
+# 系统文件
+.DS_Store
+Thumbs.db
