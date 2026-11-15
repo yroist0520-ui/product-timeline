@@ -15,6 +15,10 @@
  *
  * 用法：npm run build:pages
  * 可用环境变量覆盖：PT_PAGES_API / PT_PAGES_SHARECODE / PT_PAGES_BASE
+ *   - PT_PAGES_IFRAME=<url>  ：生成铺满视口的 iframe 容器页（地址栏保持 github.io，
+ *                              内部 iframe 嵌入同源 workbuddy.host 应用）
+ *   - PT_PAGES_REDIRECT=<url>：生成 302 跳转页（旧方案，地址栏会变）
+ *   - 均不设置                ：生成完整静态站点（与后端同源时可用）
  */
 
 const fs = require('node:fs');
@@ -68,6 +72,65 @@ function previousHashedAssets() {
 }
 
 function main() {
+  // iframe 内嵌模式：github.io 地址栏保持不变，页面内用铺满视口的 iframe
+  // 嵌入同源 workbuddy.host 上的应用。iframe 内部对后端 API 是同源请求（不携带
+  // 跨站 Origin），网关会放行；因此基础浏览不受影响，地址栏始终显示 github.io。
+  // 注意：Safari/Chrome 的第三方 Cookie 限制可能拦截 iframe 内 workbuddy.host 种的
+  // 登录态 cookie，Safari 上发布/登录可能受影响，但浏览时间线正常。
+  const iframeTo = process.env.PT_PAGES_IFRAME;
+  if (iframeTo) {
+    const src = iframeTo.replace(/\/+$/, '');
+    const page = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>PRODUCT TIMELINE</title>
+  <meta name="description" content="PRODUCT TIMELINE：浏览时间线、按分类筛选、发布并永久锁定作品记录。">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" href="favicon.ico">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PRODUCT TIMELINE">
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #f5f3ed; overflow: hidden; }
+    #app { position: fixed; inset: 0; width: 100%; height: 100%; border: 0; display: block; }
+  </style>
+</head>
+<body>
+  <iframe id="app" src="${src}" title="PRODUCT TIMELINE" allow="camera; microphone; clipboard-read; clipboard-write"></iframe>
+  <noscript><p style="font-family:sans-serif;padding:24px">请启用 JavaScript 以使用 PRODUCT TIMELINE。</p></noscript>
+</body>
+</html>`;
+    const ghManifest = JSON.stringify({
+      name: 'PRODUCT TIMELINE',
+      short_name: 'PT',
+      description: '浏览产品时间线、按分类筛选、发布并永久锁定作品记录。',
+      start_url: '.',
+      scope: '.',
+      display: 'standalone',
+      orientation: 'portrait',
+      background_color: '#f5f3ed',
+      theme_color: '#f5f3ed',
+      icons: [
+        { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+        { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      ],
+    }, null, 2);
+    fs.mkdirSync(DOCS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), page, 'utf8');
+    fs.writeFileSync(path.join(DOCS_DIR, '404.html'), page, 'utf8');
+    fs.writeFileSync(path.join(DOCS_DIR, 'manifest.webmanifest'), ghManifest, 'utf8');
+    fs.writeFileSync(path.join(DOCS_DIR, '.nojekyll'), '', 'utf8');
+    for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'favicon.ico']) {
+      const p = path.join(PUBLIC_DIR, f);
+      if (fs.existsSync(p)) fs.copyFileSync(p, path.join(DOCS_DIR, f));
+    }
+    console.log('[pages] 已生成 docs/ iframe 内嵌页 ->', src);
+    return;
+  }
+
   // 重定向模式：GitHub Pages 与后端 API 不同源，浏览器跨站请求会被网关 CSRF 拦截，
   // 因此 github.io 不再承载应用本身，而是 302 跳转到同源（workbuddy.host）的可信地址。
   const redirectTo = process.env.PT_PAGES_REDIRECT;
