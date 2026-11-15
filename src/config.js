@@ -18,6 +18,10 @@ const config = {
   BACKUP_DIR: process.env.PT_BACKUP_DIR || path.join(ROOT, 'data', 'backups'),
   UPLOAD_DIR: process.env.PT_UPLOAD_DIR || path.join(ROOT, 'uploads'),
   PUBLIC_DIR: path.join(ROOT, 'public'),
+  // 同源部署（前端与 API 同一 origin）时注入到 index.html 的分享码。
+  // 网关要求每个请求带 ?sharecode 或持有 __wb_rsc cookie；首屏带一次分享码拿到
+  // cookie 后，后续同源的子资源 / API 请求凭 cookie 即可被放行，从而绕开跨站 CSRF 拦截。
+  SHARECODE: process.env.PT_SHARECODE || 'RTB3TFEX2S',
   MAX_UPLOAD_BYTES: 50 * 1024 * 1024,
   MAX_FILES_PER_POST: 9,
   MAX_JSON_BYTES: 256 * 1024,

@@ -132,10 +132,53 @@ function resolveStatic(urlPath) {
   return full;
 }
 
+/**
+ * 同源部署时把 PT_CONFIG 注入 index.html。
+ * apiBase 留空表示「同源相对路径」，分享码由网关 cookie（__wb_rsc）在首屏之后承担，
+ * 从而让 CSS / JS / API / 图片等子资源请求都走同源、不被跨站 CSRF 拦截。
+ */
+function indexHtmlWithConfig() {
+  const shell = path.join(config.PUBLIC_DIR, 'index.html');
+  if (!fs.existsSync(shell)) return null;
+  let html = fs.readFileSync(shell, 'utf8');
+  if (!html.includes('window.PT_CONFIG =')) {
+    const cfg = JSON.stringify({ apiBase: '', sharecode: config.SHARECODE, basePath: '/' });
+    html = html.replace('<head>', `<head>\n  <script>window.PT_CONFIG = ${cfg};</script>`);
+  }
+  return html;
+}
+
+function serveIndex(res) {
+  const html = indexHtmlWithConfig();
+  if (html == null) return false;
+  res.writeHead(200, {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'no-cache',
+    'X-Content-Type-Options': 'nosniff',
+    ...(res._ptCors || {}),
+  });
+  res.end(html);
+  return true;
+}
+
 function serveStatic(req, res, urlPath) {
   const full = resolveStatic(urlPath);
   if (!full || !fs.existsSync(full) || !fs.statSync(full).isFile()) return false;
   const ext = path.extname(full).toLowerCase();
+  // index.html 注入同源 PT_CONFIG（仅当尚未注入，避免重复）
+  if (ext === '.html' && full.endsWith('index.html')) {
+    const html = indexHtmlWithConfig();
+    if (html != null) {
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
+        ...(res._ptCors || {}),
+      });
+      res.end(html);
+      return true;
+    }
+  }
   const stat = fs.statSync(full);
   const isMedia = full.startsWith(path.resolve(config.UPLOAD_DIR) + path.sep);
   const headers = {
@@ -151,5 +194,5 @@ function serveStatic(req, res, urlPath) {
 }
 
 module.exports = {
-  sendJson, sendError, readBody, readJson, parseCookies, serveStatic, resolveStatic, MIME, corsHeaders,
+  sendJson, sendError, readBody, readJson, parseCookies, serveStatic, serveIndex, resolveStatic, MIME, corsHeaders,
 };

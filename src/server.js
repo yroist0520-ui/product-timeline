@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const { config } = require('./config');
 const db = require('./db');
 const { handleApi } = require('./api');
-const { sendJson, sendError, serveStatic, corsHeaders } = require('./http');
+const { sendJson, sendError, serveStatic, serveIndex, corsHeaders } = require('./http');
 
 function start() {
   db.initDb();
@@ -54,14 +54,9 @@ function start() {
       }
       if (serveStatic(req, res, pathname)) return;
 
-      // History API 路由：无扩展名的路径统一回落到 SPA 外壳。
+      // History API 路由：无扩展名的路径统一回落到 SPA 外壳（同源注入 PT_CONFIG）。
       if (!path.extname(pathname)) {
-        const shell = path.join(config.PUBLIC_DIR, 'index.html');
-        if (fs.existsSync(shell)) {
-          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' });
-          fs.createReadStream(shell).pipe(res);
-          return;
-        }
+        if (serveIndex(res)) return;
       }
       return sendError(res, 404, 'NOT_FOUND', '页面不存在');
     } catch (err) {
