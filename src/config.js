@@ -7,7 +7,7 @@ const ROOT = path.resolve(__dirname, '..');
 const config = {
   ROOT,
   PORT: Number(process.env.PORT || 4173),
-  HOST: process.env.HOST || '127.0.0.1',
+  HOST: process.env.HOST || '0.0.0.0',
   // 反向代理后的公网 Origin（逗号分隔）。部署时显式声明，CSRF 校验无需依赖被改写的 Host。
   PUBLIC_ORIGINS: (process.env.PT_PUBLIC_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean),
   // 允许调用本 API 的独立前端源（逗号分隔），例如 GitHub Pages 站点。
