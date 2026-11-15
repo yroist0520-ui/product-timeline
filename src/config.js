@@ -18,7 +18,7 @@ const config = {
   BACKUP_DIR: process.env.PT_BACKUP_DIR || path.join(ROOT, 'data', 'backups'),
   UPLOAD_DIR: process.env.PT_UPLOAD_DIR || path.join(ROOT, 'uploads'),
   PUBLIC_DIR: path.join(ROOT, 'public'),
-  MAX_UPLOAD_BYTES: 12 * 1024 * 1024,
+  MAX_UPLOAD_BYTES: 50 * 1024 * 1024,
   MAX_FILES_PER_POST: 9,
   MAX_JSON_BYTES: 256 * 1024,
   SESSION_TTL_MS: 30 * 24 * 60 * 60 * 1000,

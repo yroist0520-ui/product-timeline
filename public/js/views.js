@@ -257,7 +257,7 @@ export function publishView() {
             <div>
               <div class="dropzone__mark">＋</div>
               <p class="dropzone__title">点击选择，或将图片拖到此处</p>
-              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF / HEIC · 单张 ≤ 12 MB · 一次最多 9 张<br>大图与 HEIC 会自动转换压缩，发布后加载更快</p>
+              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF / HEIC · 单张 ≤ 50 MB · 一次最多 9 张<br>大图与 HEIC 会自动转换压缩，发布后加载更快</p>
               <span class="dropzone__btn">选择图片</span>
             </div>
           </div>
@@ -369,7 +369,7 @@ export function publishView() {
       const accepted = [];
       for (const file of incoming) {
         if (!file || !file.size) continue;
-        if (file.size > 12 * 1024 * 1024) { toast(`${file.name || '图片'} 超过 12 MB`, 'error'); continue; }
+        if (file.size > 50 * 1024 * 1024) { toast(`${file.name || '图片'} 超过 50 MB`, 'error'); continue; }
         // 不再依赖 file.type：小红书 / 相册保存的文件常没有类型或后缀名不符，
         // 真正的格式由 ensureWebImage 按文件头魔数判断。
         accepted.push(file);

@@ -86,7 +86,7 @@ function storeImage(buffer) {
     throw Object.assign(new Error('不支持的图片格式，仅接受 JPG / PNG / WEBP / GIF / AVIF'), { status: 400 });
   }
   if (buffer.length > config.MAX_UPLOAD_BYTES) {
-    throw Object.assign(new Error('单张图片超过 12 MB 限制'), { status: 413 });
+    throw Object.assign(new Error('单张图片超过 50 MB 限制'), { status: 413 });
   }
   const hash = sha256(buffer);
   const bucket = hash.slice(0, 2);
