@@ -68,6 +68,32 @@ function previousHashedAssets() {
 }
 
 function main() {
+  // 重定向模式：GitHub Pages 与后端 API 不同源，浏览器跨站请求会被网关 CSRF 拦截，
+  // 因此 github.io 不再承载应用本身，而是 302 跳转到同源（workbuddy.host）的可信地址。
+  const redirectTo = process.env.PT_PAGES_REDIRECT;
+  if (redirectTo) {
+    const target = redirectTo.replace(/\/+$/, '');
+    const page = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url=${target}">
+  <link rel="canonical" href="${target}">
+  <title>PRODUCT TIMELINE</title>
+</head>
+<body>
+  <p>正在跳转到 PRODUCT TIMELINE… 如果未自动跳转，请<a href="${target}">点击这里</a>。</p>
+  <script>location.replace(${JSON.stringify(target)});</script>
+</body>
+</html>`;
+    fs.mkdirSync(DOCS_DIR, { recursive: true });
+    fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), page, 'utf8');
+    fs.writeFileSync(path.join(DOCS_DIR, '404.html'), page, 'utf8');
+    fs.writeFileSync(path.join(DOCS_DIR, '.nojekyll'), '', 'utf8');
+    console.log('[pages] 已生成 docs/ 重定向页 ->', target);
+    return;
+  }
+
   const previous = previousHashedAssets();
   const css = read('css/styles.css');
   const core = read('js/core.js').toString('utf8');
