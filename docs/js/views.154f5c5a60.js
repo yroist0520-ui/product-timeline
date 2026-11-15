@@ -6,8 +6,8 @@
 import {
   state, API, $, $$, escapeHtml, navigate, toast, confirmModal, initReveal,
   activeTimezone, tzLabel, timeParts, formatFull, groupProducts,
-  avatarHtml, categoryName, uid, asset,
-} from './core.d135f0569f.js';
+  avatarHtml, categoryName, uid, asset, normalizeAvatar, ensureWebImage,
+} from './core.63f0a3ede4.js';
 
 const CATEGORY_HINT = 'CATEGORY INDEX / 分类索引';
 
@@ -257,11 +257,11 @@ export function publishView() {
             <div>
               <div class="dropzone__mark">＋</div>
               <p class="dropzone__title">点击选择，或将图片拖到此处</p>
-              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF · 单张 ≤ 12 MB · 一次最多 9 张<br>大图会自动压缩后上传，发布后加载更快</p>
+              <p class="dropzone__hint">JPG / PNG / WEBP / GIF / AVIF / HEIC · 单张 ≤ 12 MB · 一次最多 9 张<br>大图与 HEIC 会自动转换压缩，发布后加载更快</p>
               <span class="dropzone__btn">选择图片</span>
             </div>
           </div>
-          <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" multiple hidden>
+          <input type="file" id="file-input" accept="image/*,.heic,.heif,.HEIC,.HEIF,.avif,.webp" multiple hidden>
           <div class="preview-list" id="preview-list" aria-live="polite"></div>
 
           <h2 class="section-label" style="margin-top:56px"><span class="section-label__num">02</span> 作品信息 <span class="rule"></span></h2>
@@ -368,8 +368,10 @@ export function publishView() {
     const addFiles = async (incoming) => {
       const accepted = [];
       for (const file of incoming) {
-        if (!file.type.startsWith('image/')) { toast(`${file.name} 不是图片文件`, 'error'); continue; }
-        if (file.size > 12 * 1024 * 1024) { toast(`${file.name} 超过 12 MB`, 'error'); continue; }
+        if (!file || !file.size) continue;
+        if (file.size > 12 * 1024 * 1024) { toast(`${file.name || '图片'} 超过 12 MB`, 'error'); continue; }
+        // 不再依赖 file.type：小红书 / 相册保存的文件常没有类型或后缀名不符，
+        // 真正的格式由 ensureWebImage 按文件头魔数判断。
         accepted.push(file);
       }
       const room = 9 - files.length;
@@ -377,8 +379,14 @@ export function publishView() {
       const chosen = accepted.slice(0, room);
       if (chosen.some((f) => f.size > 900 * 1024 && f.type !== 'image/gif')) toast('正在优化大图，稍候即可预览');
       for (const file of chosen) {
-        const optimized = await optimizeImage(file);
-        files.push({ id: uid(), file: optimized, url: URL.createObjectURL(optimized) });
+        try {
+          const { file: readable, converted } = await ensureWebImage(file);
+          if (converted) toast(`${file.name || 'HEIC 照片'} 已自动转为 JPG`);
+          const optimized = await optimizeImage(readable);
+          files.push({ id: uid(), file: optimized, url: URL.createObjectURL(optimized) });
+        } catch (err) {
+          toast(`${file.name || '图片'}：${err.message}`, 'error', 7000);
+        }
       }
       refreshPreview();
       if (accepted.length > room) toast(`已保留前 ${room} 张，单次最多 9 张`, 'error');
@@ -601,9 +609,9 @@ export async function settingsView() {
           <div class="settings-avatar">
             <span id="settings-avatar">${avatarHtml(u)}</span>
             <div class="settings-avatar__body">
-              <span class="field__hint">头像建议为方形图片，上传后即时生效</span>
+              <span class="field__hint">支持 JPG / PNG / WEBP / GIF / AVIF / HEIC（iPhone、小红书常见格式），自动压缩并居中裁成方形</span>
               <button class="btn btn--ghost" id="avatar-btn" style="min-height:40px;padding:8px 16px">更换头像</button>
-              <input type="file" id="avatar-input" accept="image/*" hidden>
+              <input type="file" id="avatar-input" accept="image/*,.heic,.heif,.HEIC,.HEIF,.avif,.webp" hidden>
             </div>
           </div>
           <form id="settings-form">
@@ -692,16 +700,31 @@ export async function settingsView() {
     $('#avatar-btn').addEventListener('click', () => $('#avatar-input').click());
     $('#avatar-input').addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
+      e.target.value = ''; // 允许再次选择同一张图片
       if (!file) return;
-      const fd = new FormData();
-      fd.append('avatar', file);
+      const btn = $('#avatar-btn');
+      const label = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = '正在处理图片…';
       try {
+        const { file: prepared, converted } = await normalizeAvatar(file);
+        btn.textContent = '正在上传…';
+        const fd = new FormData();
+        fd.append('avatar', prepared, prepared.name);
         const res = await API.uploadAvatar(fd);
         state.user = res.user;
         $('#settings-avatar').innerHTML = avatarHtml(res.user);
-        toast('头像已更新');
-      } catch (err) { toast(err.message || '头像上传失败', 'error'); }
-      e.target.value = '';
+        const navAvatar = document.querySelector('.nav-user__avatar');
+        if (navAvatar && res.user.avatar) navAvatar.src = asset(res.user.avatar);
+        window.dispatchEvent(new CustomEvent('pt:user-change'));
+        toast(converted ? '头像已更新 · HEIC 照片已自动转为 JPG' : '头像已更新');
+      } catch (err) {
+        // 格式说明较长，给足阅读时间
+        toast(err.message || '头像上传失败', 'error', 7000);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = label;
+      }
     });
     $('#verify-btn').addEventListener('click', async () => {
       const box = $('#verify-result');

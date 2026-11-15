@@ -4,8 +4,8 @@
 
 import {
   state, API, $, $$, navigate, routePath, initReveal, applyTheme, avatarHtml, escapeHtml, toast,
-} from './core.d135f0569f.js';
-import * as V from './views.d62142f23a.js';
+} from './core.63f0a3ede4.js';
+import * as V from './views.4cdc99091c.js';
 
 const app = $('#app');
 const nav = $('#site-nav');
@@ -130,6 +130,7 @@ navToggle.addEventListener('click', () => {
 
 window.addEventListener('popstate', route);
 window.addEventListener('pt:navigate', route);
+window.addEventListener('pt:user-change', updateNav);
 
 /* ── 启动 ─────────────────────────────────────────────────────────────── */
 async function boot() {

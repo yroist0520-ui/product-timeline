@@ -102,6 +102,19 @@ function main() {
     fs.cpSync(assetsSrc, assetsDst, { recursive: true });
   }
 
+  // HEIC/HEIF 浏览器解码组件：只在用户真的选中这类照片时才按需加载，
+  // 因此不参与入口资源哈希，但需要随静态站点一起发布。
+  const vendorSrc = path.join(PUBLIC_DIR, 'vendor');
+  const vendorDst = path.join(DOCS_DIR, 'vendor');
+  if (fs.existsSync(vendorSrc)) {
+    fs.rmSync(vendorDst, { recursive: true, force: true });
+    fs.cpSync(vendorSrc, vendorDst, { recursive: true });
+  }
+
+  // 浏览器仍会按惯例请求站点根目录的 favicon.ico，避免子路径下 404。
+  const ico = path.join(PUBLIC_DIR, 'favicon.ico');
+  if (fs.existsSync(ico)) fs.copyFileSync(ico, path.join(DOCS_DIR, 'favicon.ico'));
+
   const shell = buildShell(names);
   fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), shell, 'utf8');
   // GitHub Pages 对不存在的子路径会返回 404.html；用 SPA 外壳兜底，

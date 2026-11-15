@@ -130,6 +130,7 @@ navToggle.addEventListener('click', () => {
 
 window.addEventListener('popstate', route);
 window.addEventListener('pt:navigate', route);
+window.addEventListener('pt:user-change', updateNav);
 
 /* ── 启动 ─────────────────────────────────────────────────────────────── */
 async function boot() {

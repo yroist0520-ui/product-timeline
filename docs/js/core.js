@@ -310,6 +310,163 @@ export function uid() {
   return (crypto.randomUUID ? crypto.randomUUID() : `tok-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 }
 
+/* ── 头像图片规范化 ─────────────────────────────────────────────────────
+   服务端按文件真实内容（魔数）判定格式，只持久化 JPG / PNG / WEBP /
+   GIF / AVIF。iPhone 相册、从小红书等 App 保存的图片常常是 HEIC / HEIF
+   （或后缀是 .jpg 但内容仍是 HEIF），直接上传会被拒绝；超长图、超大图、
+   带 EXIF 旋转的照片也容易造成上传慢或显示歪斜。
+
+   这里在浏览器里完成兼容：HEIC/HEIF 按需加载解码组件转为 JPEG，其余格式
+   统一解码后居中裁成 512×512 的 JPEG 再上传。服务端收到的始终是标准图片，
+   不需要改动后端、也不需要重新部署数据库；作品记录与不可篡改规则不受影响。
+   ---------------------------------------------------------------------- */
+const AVATAR_SIZE = 512;
+const MAX_AVATAR_INPUT = 40 * 1024 * 1024;
+let heicLoader = null;
+
+function siteAsset(rel) {
+  const base = CFG ? String(CFG.basePath || '/') : '/';
+  return base.replace(/\/?$/, '/') + rel;
+}
+
+/** 只在确实选中 HEIC/HEIF 时才加载 1.3 MB 的解码组件，不拖累首屏。 */
+function loadHeic2any() {
+  if (typeof window.heic2any === 'function') return Promise.resolve(window.heic2any);
+  if (!heicLoader) {
+    heicLoader = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = siteAsset('vendor/heic2any.min.js');
+      script.async = true;
+      script.onload = () => (typeof window.heic2any === 'function'
+        ? resolve(window.heic2any)
+        : reject(new Error('HEIC 解码组件加载异常')));
+      script.onerror = () => reject(new Error('HEIC 解码组件加载失败，请检查网络后重试'));
+      document.head.appendChild(script);
+    }).catch((err) => { heicLoader = null; throw err; });
+  }
+  return heicLoader;
+}
+
+/** 读取文件头判断真实格式，绝不相信扩展名或 file.type。 */
+async function fileSignature(blob) {
+  const head = new Uint8Array(await blob.slice(0, 16).arrayBuffer());
+  const text = (a, b) => Array.from(head.slice(a, b), (n) => String.fromCharCode(n)).join('');
+  const brand = text(8, 12).toLowerCase();
+  return {
+    ftyp: text(4, 8) === 'ftyp',
+    brand,
+    avif: /^(avif|avis)/i.test(brand),
+    known: head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff
+      || text(1, 4) === 'PNG'
+      || (text(0, 4) === 'RIFF' && text(8, 12) === 'WEBP')
+      || /^GIF8[79]a$/.test(text(0, 6)),
+  };
+}
+
+/** 解码任意浏览器可读图片，返回统一尺寸描述与释放句柄。 */
+async function decodeImage(blob) {
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bitmap = await createImageBitmap(blob, { imageOrientation: 'from-image' });
+      return { source: bitmap, width: bitmap.width, height: bitmap.height, release: () => bitmap.close?.() };
+    } catch { /* 老浏览器不支持选项或该格式，改用 <img> */ }
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((resolve, reject) => {
+      const el = new Image();
+      el.onload = () => resolve(el);
+      el.onerror = () => reject(new Error('decode'));
+      el.src = url;
+    });
+    return {
+      source: img,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      release: () => URL.revokeObjectURL(url),
+    };
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error('decode');
+  }
+}
+
+/**
+ * 把任意来源的图片变成「浏览器能解码、后端能接受」的文件。
+ * 头像与作品发布共用：HEIC / HEIF 只在这里转成一次 JPEG。
+ * 返回 { file, converted }。
+ */
+export async function ensureWebImage(file) {
+  if (!file || !file.size) throw new Error('没有读取到图片内容，请重新选择文件');
+  if (file.size > MAX_AVATAR_INPUT) throw new Error('图片超过 40 MB，请先压缩或截图后再上传');
+
+  const sig = await fileSignature(file);
+  // 所有 ftyp 容器且非 AVIF 的，基本都是 HEIC / HEIF 家族；
+  // 后缀写成 .jpg 也照样按真实内容识别。
+  const isHeif = (sig.ftyp && !sig.avif)
+    || (/\.(heic|heif)$/i.test(String(file.name || '')) && !sig.known);
+  if (isHeif) {
+    const convert = await loadHeic2any();
+    let output;
+    try {
+      output = await convert({ blob: file, toType: 'image/jpeg', quality: 0.92 });
+    } catch {
+      throw new Error('这是 HEIC / HEIF 照片，自动转换失败。请在相册里用「共享 → 复制照片」或截图另存为 JPG 后再上传。');
+    }
+    const blob = Array.isArray(output) ? output[0] : output;
+    if (!blob || !blob.size) throw new Error('HEIC 照片转换结果为空，请换一张图片重试');
+    const name = String(file.name || 'photo').replace(/\.[^.]+$/, '') + '.jpg';
+    return { file: new File([blob], name, { type: 'image/jpeg' }), converted: true };
+  }
+
+  // 魔数无法识别时先验证浏览器能否解码，避免非图片混进预览区和上传队列。
+  if (!sig.known && !sig.avif) {
+    let decoded;
+    try { decoded = await decodeImage(file); } catch {
+      throw new Error('这张图片浏览器无法读取，可能是 HEIC / RAW / 损坏文件。请用系统相册或预览导出为 JPG / PNG 后再上传。');
+    }
+    decoded.release();
+  }
+  return { file, converted: false };
+}
+
+/**
+ * 把用户选择的文件转成后端一定接受的标准头像文件。
+ * 返回 { file, converted }；converted 表示是否发生过格式转换。
+ */
+export async function normalizeAvatar(file) {
+  const { file: prepared, converted } = await ensureWebImage(file);
+
+  let decoded;
+  try {
+    decoded = await decodeImage(prepared);
+  } catch {
+    throw new Error('这张图片浏览器无法读取，可能是 HEIC / RAW / 损坏文件。请用系统相册或预览导出为 JPG / PNG 后再上传。');
+  }
+  if (!decoded.width || !decoded.height) {
+    decoded.release();
+    throw new Error('图片尺寸无效，请换一张照片重试');
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = AVATAR_SIZE;
+  const ctx = canvas.getContext('2d');
+  // JPEG 不支持透明通道，先铺一层纸白底，避免透明 PNG 边缘变黑。
+  ctx.fillStyle = '#f5f3ed';
+  ctx.fillRect(0, 0, AVATAR_SIZE, AVATAR_SIZE);
+  const side = Math.min(decoded.width, decoded.height);
+  const sx = (decoded.width - side) / 2;
+  const sy = (decoded.height - side) / 2;
+  ctx.drawImage(decoded.source, sx, sy, side, side, 0, 0, AVATAR_SIZE, AVATAR_SIZE);
+  decoded.release();
+
+  const out = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9));
+  if (!out) throw new Error('图片处理失败，请换一张照片重试');
+  const type = out.type || 'image/jpeg';
+  const ext = type === 'image/png' ? 'png' : type === 'image/webp' ? 'webp' : 'jpg';
+  return { file: new File([out], `avatar.${ext}`, { type }), converted };
+}
+
 /* ── 图片加载反馈 ───────────────────────────────────────────────────────
    load / error 不冒泡，用捕获阶段监听。图片未到位时容器保持骨架占位，
    加载完成后淡入，避免「一片空白」被误认为上传或加载失败。

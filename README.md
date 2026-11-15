@@ -153,6 +153,19 @@ GitHub Pages 只能托管静态文件，因此 `docs/` 由 `public/` 通过 `npm
 
 ---
 
+## 图片格式兼容（HEIC / HEIF）
+
+服务端按文件头魔数只持久化 `JPG / PNG / WEBP / GIF / AVIF`。iPhone 相册、从小红书等 App 保存的照片经常是 **HEIC / HEIF**，或后缀写成 `.jpg` 但内容仍是 HEIF，直接上传会收到 `IMAGE_REJECTED`。
+
+前端 `ensureWebImage()` 统一处理，后端与数据库无需改动、线上数据不受影响：
+
+- 按魔数而非 `file.type` / 扩展名识别真实格式；HEIC / HEIF 按需加载 `public/vendor/heic2any.min.js`（MIT，约 1.3 MB，只在真的选中这类照片时加载）在浏览器内转成 JPEG；
+- 头像随后居中裁成 512×512 的标准 JPEG（透明 PNG 先铺纸白底，避免变黑），作品图保留原比例继续走 > 900 KB 的 WebP 压缩；
+- 因此无扩展名文件、后缀伪装文件、超大图、带 EXIF 旋转的照片、WebP / AVIF / GIF 动图都能上传；浏览器确实无法解码的 RAW / 损坏文件会给出明确的转换指引，而不是笼统报错；
+- 文件选择器同时放开 `.heic` / `.heif`；第三方解码组件许可见 `public/vendor/heic2any.LICENSE.txt`。
+
+---
+
 ## License
 
 个人项目，未声明开源许可；如需开源请自行补充 LICENSE。
