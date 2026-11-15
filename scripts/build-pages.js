@@ -115,6 +115,12 @@ function main() {
   const ico = path.join(PUBLIC_DIR, 'favicon.ico');
   if (fs.existsSync(ico)) fs.copyFileSync(ico, path.join(DOCS_DIR, 'favicon.ico'));
 
+  // 可安装为独立 App 所需的清单与图标（PWA）。
+  for (const f of ['manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) {
+    const p = path.join(PUBLIC_DIR, f);
+    if (fs.existsSync(p)) fs.copyFileSync(p, path.join(DOCS_DIR, f));
+  }
+
   const shell = buildShell(names);
   fs.writeFileSync(path.join(DOCS_DIR, 'index.html'), shell, 'utf8');
   // GitHub Pages 对不存在的子路径会返回 404.html；用 SPA 外壳兜底，
