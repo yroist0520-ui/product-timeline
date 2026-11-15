@@ -12,7 +12,12 @@ const config = {
   PUBLIC_ORIGINS: (process.env.PT_PUBLIC_ORIGIN || '').split(',').map((s) => s.trim()).filter(Boolean),
   // 允许调用本 API 的独立前端源（逗号分隔），例如 GitHub Pages 站点。
   // 这些源使用 Bearer 令牌而非 Cookie，因此不受 SameSite / 第三方 Cookie 限制。
-  CORS_ORIGINS: (process.env.PT_CORS_ORIGINS || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean),
+  // 默认内置本站的 GitHub Pages 源，让 github.io 静态前端可直接调用真实后端。
+  // 无论部署环境是否设置环境变量，都保留 github.io 静态前端这一可信源。
+  CORS_ORIGINS: Array.from(new Set([
+    'https://yroist0520-ui.github.io',
+    ...(process.env.PT_CORS_ORIGINS || '').split(',').map((s) => s.trim().replace(/\/$/, '')).filter(Boolean),
+  ])),
   DATA_DIR: process.env.PT_DATA_DIR || path.join(ROOT, 'data'),
   DB_PATH: process.env.PT_DB || path.join(ROOT, 'data', 'timeline.sqlite'),
   BACKUP_DIR: process.env.PT_BACKUP_DIR || path.join(ROOT, 'data', 'backups'),

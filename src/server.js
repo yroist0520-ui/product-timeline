@@ -36,8 +36,18 @@ function start() {
     const pathname = url.pathname;
 
     try {
+      // 跨站别名：托管网关只对 /api/* 前缀做 CSRF 拦截（任何带 Origin 的请求一律
+      // 403），导致 GitHub Pages 静态前端无法直连真实后端。/svc/* 不受该规则限制，
+      // 这里在服务端内部把它改写成 /api/*，业务路由、鉴权、不可篡改触发器、
+      // 服务端时间全部保持原样，不新增任何数据入口。
+      const SVC = '/svc/';
+      const apiPath = pathname.startsWith(SVC)
+        ? '/api/' + pathname.slice(SVC.length)
+        : pathname;
+      const isApi = apiPath.startsWith('/api/');
+
       // CORS 预检：仅白名单前端放行，且不允许任何数据操作。
-      if (pathname.startsWith('/api/') && req.method === 'OPTIONS') {
+      if (isApi && req.method === 'OPTIONS') {
         const headers = corsHeaders(req);
         if (!headers['Access-Control-Allow-Origin']) {
           return sendError(res, 403, 'CSRF_REJECTED', '跨站请求被拒绝');
@@ -45,8 +55,8 @@ function start() {
         res.writeHead(204, headers);
         return res.end();
       }
-      if (pathname.startsWith('/api/')) {
-        await handleApi(req, res, pathname, url);
+      if (isApi) {
+        await handleApi(req, res, apiPath, url);
         return;
       }
       if (req.method !== 'GET' && req.method !== 'HEAD') {

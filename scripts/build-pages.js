@@ -205,9 +205,18 @@ function main() {
   if (fs.existsSync(ico)) fs.copyFileSync(ico, path.join(DOCS_DIR, 'favicon.ico'));
 
   // 可安装为独立 App 所需的清单与图标（PWA）。
-  for (const f of ['manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) {
+  // manifest 的 start_url / scope 必须指向 GitHub Pages 子路径本身（public/ 里那份
+  // 是给同源后端用的 "/?sharecode=..."），否则「添加到主屏幕」会打开错误地址。
+  for (const f of ['apple-touch-icon.png', 'icon-192.png', 'icon-512.png']) {
     const p = path.join(PUBLIC_DIR, f);
     if (fs.existsSync(p)) fs.copyFileSync(p, path.join(DOCS_DIR, f));
+  }
+  const manifestSrc = path.join(PUBLIC_DIR, 'manifest.webmanifest');
+  if (fs.existsSync(manifestSrc)) {
+    const manifest = JSON.parse(fs.readFileSync(manifestSrc, 'utf8'));
+    manifest.start_url = BASE_PATH;
+    manifest.scope = BASE_PATH;
+    fs.writeFileSync(path.join(DOCS_DIR, 'manifest.webmanifest'), JSON.stringify(manifest, null, 2), 'utf8');
   }
 
   const shell = buildShell(names);

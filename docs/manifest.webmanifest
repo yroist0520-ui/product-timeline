@@ -1,13 +1,21 @@
 {
   "name": "PRODUCT TIMELINE",
-  "short_name": "PT",
-  "description": "浏览产品时间线、按分类筛选、发布并永久锁定作品记录。",
-  "start_url": ".",
-  "scope": ".",
+  "short_name": "Timeline",
+  "description": "记录每一次产品创作与发布——真实服务端时间、发布后永久锁定的个人数字产品档案。",
+  "start_url": "/product-timeline/",
+  "scope": "/product-timeline/",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "fullscreen"
+  ],
   "orientation": "portrait",
   "background_color": "#f5f3ed",
   "theme_color": "#f5f3ed",
+  "categories": [
+    "productivity",
+    "lifestyle"
+  ],
   "icons": [
     {
       "src": "icon-192.png",
@@ -20,6 +28,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

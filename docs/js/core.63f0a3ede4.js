@@ -82,9 +82,13 @@ export function routePath() {
 
 function apiUrl(path) {
   if (!CFG) return path;
-  const sep = path.includes('?') ? '&' : '?';
+  // 托管网关只对 /api/* 前缀做跨站 CSRF 拦截（任何带 Origin 的请求一律 403）。
+  // 独立前端（apiBase 非空，如 GitHub Pages）改走服务端 /svc/* 别名，由后端内部
+  // 改写成 /api/*，业务逻辑与不可篡改规则完全不变；同源部署继续用 /api/*。
+  const mapped = CFG.apiBase ? path.replace(/^\/api\//, '/svc/') : path;
+  const sep = mapped.includes('?') ? '&' : '?';
   const q = CFG.sharecode ? sep + 'sharecode=' + encodeURIComponent(CFG.sharecode) : '';
-  return CFG.apiBase + path + q;
+  return CFG.apiBase + mapped + q;
 }
 
 export async function api(path, options = {}) {

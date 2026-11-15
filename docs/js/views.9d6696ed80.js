@@ -7,7 +7,7 @@ import {
   state, API, $, $$, escapeHtml, navigate, toast, confirmModal, initReveal,
   activeTimezone, tzLabel, timeParts, formatFull, groupProducts,
   avatarHtml, categoryName, uid, asset, normalizeAvatar, ensureWebImage,
-} from './core.63f0a3ede4.js';
+} from './core.4272aab1b5.js';
 
 const CATEGORY_HINT = 'CATEGORY INDEX / 分类索引';
 
